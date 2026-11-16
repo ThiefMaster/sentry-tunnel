@@ -9,14 +9,18 @@ use axum::{body::Bytes, http::StatusCode};
 pub async fn handle_sentry_tunnel(
     config: Arc<SentryTunnelConfig>,
     envelope_bytes: Bytes,
+    client_ip: Option<&str>,
 ) -> Result<StatusCode, SentryTunnelError> {
-    handle_sentry_tunnel_inner(config, &envelope_bytes).await.map(|_| StatusCode::OK)
+    handle_sentry_tunnel_inner(config, &envelope_bytes, client_ip)
+        .await
+        .map(|_| StatusCode::OK)
 }
 
 /// Core handler logic independent of web framework
 pub async fn handle_sentry_tunnel_inner(
     config: Arc<SentryTunnelConfig>,
     envelope_bytes: &[u8],
+    client_ip: Option<&str>,
 ) -> Result<(), SentryTunnelError> {
     // Extract first line (header)
     let header_bytes = envelope_bytes
@@ -65,15 +69,17 @@ pub async fn handle_sentry_tunnel_inner(
         .build()
         .map_err(|e| SentryTunnelError::TunnelError(e.to_string()))?;
 
-    let response = client
+    let mut req = client
         .post(&upstream_sentry_url)
-        .body(envelope_bytes.to_vec())
-        .send()
-        .await
-        .map_err(|e| {
-            tracing::error!("Error tunneling to sentry: {}", e);
-            SentryTunnelError::TunnelError(e.to_string())
-        })?;
+        .body(envelope_bytes.to_vec());
+    tracing::debug!("Client IP: {client_ip:?}");
+    if let Some(client_ip) = client_ip {
+        req = req.header("X-Forwarded-For", client_ip);
+    }
+    let response = req.send().await.map_err(|e| {
+        tracing::error!("Error tunneling to sentry: {}", e);
+        SentryTunnelError::TunnelError(e.to_string())
+    })?;
 
     if response.status().is_success() {
         Ok(())

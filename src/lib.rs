@@ -4,7 +4,7 @@ mod handler;
 
 pub use config::SentryTunnelConfig;
 pub use error::SentryTunnelError;
-pub use handler::handle_sentry_tunnel_inner;
+pub use handler::{handle_sentry_tunnel, handle_sentry_tunnel_inner};
 
 #[cfg(feature = "extension")]
 use axum::{Router, body::Bytes, extract::State, http::StatusCode, routing::post};
@@ -28,7 +28,7 @@ pub async fn sentry_tunnel_handler(
     State(config): State<Arc<SentryTunnelConfig>>,
     body: Bytes,
 ) -> Result<StatusCode, SentryTunnelError> {
-    handler::handle_sentry_tunnel(config, body).await
+    handler::handle_sentry_tunnel(config, body, None).await
 }
 
 #[cfg(feature = "extension")]
